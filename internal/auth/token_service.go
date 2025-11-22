@@ -24,7 +24,6 @@ type TokenService interface {
 	GenerateTokens(ctx context.Context, userID int64) (accessToken, refreshToken string, err error)
 	ParseAccessToken(tokenStr string) (*Claims, error)
 	RefreshTokens(ctx context.Context, refreshToken string) (string, string, error)
-	RevokeRefreshToken(ctx context.Context, token string) error
 }
 
 type tokenService struct {
@@ -41,6 +40,29 @@ func NewTokenService(secret string, accessTTL, refreshTTL time.Duration, rdb *re
 		refreshTTL: refreshTTL,
 		redis:      rdb,
 	}
+}
+
+func (s *tokenService) parseRefreshClaims(tokenStr string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrTokenUnverifiable
+		}
+		return s.secret, nil
+	})
+	if err != nil {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	if claims.ID == "" {
+		return nil, ErrInvalidRefreshToken
+	}
+
+	return claims, nil
 }
 
 func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string, string, error) {
@@ -107,19 +129,12 @@ func (s *tokenService) ParseAccessToken(tokenStr string) (*Claims, error) {
 
 func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (string, string, error) {
 	// 1) parse + verify refresh JWT
-	token, err := jwt.ParseWithClaims(refreshToken, &Claims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrTokenUnverifiable
-		}
-		return s.secret, nil
-	})
+	claims, err := s.parseRefreshClaims(refreshToken)
 	if err != nil {
-		return "", "", ErrInvalidRefreshToken
-	}
-
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return "", "", ErrInvalidRefreshToken
+		if errors.Is(err, ErrInvalidRefreshToken) {
+			return "", "", ErrInvalidRefreshToken
+		}
+		return "", "", err
 	}
 
 	// เช็คหมดอายุ (กันเหนียว)
@@ -155,9 +170,4 @@ func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (
 	}
 
 	return newAccess, newRefresh, nil
-}
-
-func (s *tokenService) RevokeRefreshToken(ctx context.Context, token string) error {
-	key := "refresh:" + token
-	return s.redis.Del(ctx, key).Err()
 }
