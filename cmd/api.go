@@ -59,10 +59,11 @@ func (app *application) mount() http.Handler {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
 		r.Post("/refresh", authHandler.Refresh)
+		r.Post("/logout", authHandler.Logout)
 	})
 
 	// ส่วนนี้คือ protected routes (ต้องมี access token)
-	r.Route("/api", func(r chi.Router) {
+	r.Route("/", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			// ใช้ AuthMiddleware ครอบทั้ง group
 			r.Use(auth.AuthMiddleware(app.tokenService))

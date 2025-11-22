@@ -154,3 +154,25 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		"access_token": access,
 	})
 }
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	// ลบ refresh_token cookie ด้วย MaxAge = -1
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+
+	// ถ้า refresh token มี blacklist
+	cookie, err := r.Cookie("refresh_token")
+	if err == nil && cookie.Value != "" {
+		// คุณมี tokenService ที่ใช้ Redis ใช่ไหม
+		_ = h.tokenService.RevokeRefreshToken(r.Context(), cookie.Value)
+	}
+
+	utils.WriteJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
+}

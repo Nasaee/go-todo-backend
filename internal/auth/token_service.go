@@ -24,13 +24,14 @@ type TokenService interface {
 	GenerateTokens(ctx context.Context, userID int64) (accessToken, refreshToken string, err error)
 	ParseAccessToken(tokenStr string) (*Claims, error)
 	RefreshTokens(ctx context.Context, refreshToken string) (string, string, error)
+	RevokeRefreshToken(ctx context.Context, token string) error
 }
 
 type tokenService struct {
 	secret     []byte
 	accessTTL  time.Duration
 	refreshTTL time.Duration
-	rdb        *redis.Client
+	redis      *redis.Client
 }
 
 func NewTokenService(secret string, accessTTL, refreshTTL time.Duration, rdb *redis.Client) TokenService {
@@ -38,7 +39,7 @@ func NewTokenService(secret string, accessTTL, refreshTTL time.Duration, rdb *re
 		secret:     []byte(secret),
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
-		rdb:        rdb,
+		redis:      rdb,
 	}
 }
 
@@ -77,7 +78,7 @@ func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string
 
 	// เก็บ jti -> userID ใน redis (ไว้เช็คตอน refresh / revoke)
 	key := "refresh:" + jti
-	if err := s.rdb.Set(ctx, key, userID, s.refreshTTL).Err(); err != nil {
+	if err := s.redis.Set(ctx, key, userID, s.refreshTTL).Err(); err != nil {
 		return "", "", err
 	}
 
@@ -135,7 +136,7 @@ func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (
 	// 2) เช็คใน redis ว่า jti นี้ยัง valid มั้ย
 	key := "refresh:" + claims.ID
 
-	exists, err := s.rdb.Exists(ctx, key).Result()
+	exists, err := s.redis.Exists(ctx, key).Result()
 	if err != nil {
 		return "", "", err
 	}
@@ -145,7 +146,7 @@ func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (
 	}
 
 	// single-use: ลบ jti เดิมออก
-	_ = s.rdb.Del(ctx, key).Err()
+	_ = s.redis.Del(ctx, key).Err()
 
 	// 3) ออก access + refresh ใหม่ ด้วย userID เดิม
 	newAccess, newRefresh, err := s.GenerateTokens(ctx, claims.UserID)
@@ -154,4 +155,9 @@ func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (
 	}
 
 	return newAccess, newRefresh, nil
+}
+
+func (s *tokenService) RevokeRefreshToken(ctx context.Context, token string) error {
+	key := "refresh:" + token
+	return s.redis.Del(ctx, key).Err()
 }
