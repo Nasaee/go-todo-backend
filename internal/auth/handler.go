@@ -84,19 +84,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"message": "invalid body"})
 		return
 	}
 
 	u, err := h.userService.Authenticate(r.Context(), req.Email, req.Password)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+		utils.WriteJSON(w, http.StatusUnauthorized, map[string]string{"message": "invalid email or password"})
 		return
 	}
 
 	access, refresh, accessExp, err := h.tokenService.GenerateTokens(r.Context(), u.ID)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "token error"})
+		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{"message": "token error"})
 		return
 	}
 
