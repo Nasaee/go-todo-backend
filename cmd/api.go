@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
+	"github.com/Nasaee/go-todo-backend/internal/env"
 	"github.com/Nasaee/go-todo-backend/internal/user"
 	"github.com/Nasaee/go-todo-backend/pkg/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -37,6 +39,17 @@ type application struct {
 
 func (app *application) mount() http.Handler {
 	r := chi.NewRouter()
+
+	slog.Info("corsMiddleware loaded")
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{env.GetString("FRONTEND_URL", "http://localhost:3000")}, // origin ของ frontend
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // cache preflight 5 นาที
+	}))
 
 	// A good base middleware stack
 	r.Use(middleware.RequestID) // important for rate limiting

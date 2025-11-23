@@ -21,9 +21,9 @@ var (
 )
 
 type TokenService interface {
-	GenerateTokens(ctx context.Context, userID int64) (accessToken, refreshToken string, err error)
+	GenerateTokens(ctx context.Context, userID int64) (accessToken, refreshToken string, accessExpiresAt int64, err error)
 	ParseAccessToken(tokenStr string) (*Claims, error)
-	RefreshTokens(ctx context.Context, refreshToken string) (string, string, error)
+	RefreshTokens(ctx context.Context, refreshToken string) (string, string, int64, error)
 }
 
 type tokenService struct {
@@ -65,8 +65,10 @@ func (s *tokenService) parseRefreshClaims(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string, string, error) {
+func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string, string, int64, error) {
 	now := time.Now()
+
+	accessExpiresAt := now.Add(s.accessTTL)
 
 	// ----- access token -----
 	accessClaims := &Claims{
@@ -79,7 +81,7 @@ func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string
 
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.secret)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	// ----- refresh token -----
@@ -95,16 +97,18 @@ func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string
 
 	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(s.secret)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	// เก็บ jti -> userID ใน redis (ไว้เช็คตอน refresh / revoke)
 	key := "refresh:" + jti
 	if err := s.redis.Set(ctx, key, userID, s.refreshTTL).Err(); err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
-	return accessToken, refreshToken, nil
+	expiresAt := accessExpiresAt.Unix()
+
+	return accessToken, refreshToken, expiresAt, nil
 }
 
 func (s *tokenService) ParseAccessToken(tokenStr string) (*Claims, error) {
@@ -127,25 +131,25 @@ func (s *tokenService) ParseAccessToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (string, string, error) {
+func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (string, string, int64, error) {
 	// 1) parse + verify refresh JWT
 	claims, err := s.parseRefreshClaims(refreshToken)
 	if err != nil {
 		if errors.Is(err, ErrInvalidRefreshToken) {
-			return "", "", ErrInvalidRefreshToken
+			return "", "", 0, ErrInvalidRefreshToken
 		}
-		return "", "", err
+		return "", "", 0, err
 	}
 
 	// เช็คหมดอายุ (กันเหนียว)
 	if claims.ExpiresAt != nil && time.Now().After(claims.ExpiresAt.Time) {
-		return "", "", ErrExpiredRefreshToken
+		return "", "", 0, ErrExpiredRefreshToken
 	}
 
 	// access token ที่คุณออกไม่มี ID (jti)
 	// refresh token เท่านั้นที่มี ID และถูกเก็บใน redis
 	if claims.ID == "" {
-		return "", "", ErrInvalidRefreshToken
+		return "", "", 0, ErrInvalidRefreshToken
 	}
 
 	// 2) เช็คใน redis ว่า jti นี้ยัง valid มั้ย
@@ -153,21 +157,21 @@ func (s *tokenService) RefreshTokens(ctx context.Context, refreshToken string) (
 
 	exists, err := s.redis.Exists(ctx, key).Result()
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 	if exists == 0 {
 		// ไม่มีใน redis = หมดอายุ / revoke / ใช้ไปแล้ว
-		return "", "", ErrInvalidRefreshToken
+		return "", "", 0, ErrInvalidRefreshToken
 	}
 
 	// single-use: ลบ jti เดิมออก
 	_ = s.redis.Del(ctx, key).Err()
 
 	// 3) ออก access + refresh ใหม่ ด้วย userID เดิม
-	newAccess, newRefresh, err := s.GenerateTokens(ctx, claims.UserID)
+	newAccess, newRefresh, accessExp, err := s.GenerateTokens(ctx, claims.UserID)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
 
-	return newAccess, newRefresh, nil
+	return newAccess, newRefresh, accessExp, nil
 }

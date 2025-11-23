@@ -36,7 +36,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	// อ่าน body
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"message": "invalid body"})
 		return
 	}
 
@@ -44,14 +44,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	u, err := h.userService.Register(r.Context(), req.FirstName, req.LastName, req.Email, req.Password)
 	if err != nil {
 		// ตรงนี้คุณจะ map error ให้สวยกว่านี้ทีหลังก็ได้ เช่น เช็ค ErrEmailTaken
-		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
 		return
 	}
 
 	// gen access / refresh token
-	access, refresh, err := h.tokenService.GenerateTokens(r.Context(), u.ID)
+	access, refresh, accessExp, err := h.tokenService.GenerateTokens(r.Context(), u.ID)
 	if err != nil {
-		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "token error"})
+		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{"message": "token error"})
 		return
 	}
 
@@ -60,16 +60,17 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Name:     "refresh_token",
 		Value:    refresh,
 		HttpOnly: true,
-		Secure:   h.isProd,                    // dev = false, prod = true (อ่านจาก APP_ENV)
-		SameSite: http.SameSiteLaxMode,        // กัน CSRF ได้ในระดับนึง
-		Path:     "/auth/refresh",             // จะส่ง cookie แค่ตอนเรียก /auth/refresh
+		Secure:   h.isProd,             // dev = false, prod = true (อ่านจาก APP_ENV)
+		SameSite: http.SameSiteLaxMode, // กัน CSRF ได้ในระดับนึง
+		Path:     "/",
 		MaxAge:   int(h.refreshTTL.Seconds()), // ใช้ค่าเดียวกับ refresh TTL ใน config
 	})
 
 	// ส่ง user + access token กลับไป
 	resp := map[string]any{
-		"user":         u,
-		"access_token": access,
+		"user":           user.ToUserDTO(u),
+		"access_token":   access,
+		"access_expires": accessExp,
 	}
 
 	utils.WriteJSON(w, http.StatusCreated, resp)
@@ -93,7 +94,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, refresh, err := h.tokenService.GenerateTokens(r.Context(), u.ID)
+	access, refresh, accessExp, err := h.tokenService.GenerateTokens(r.Context(), u.ID)
 	if err != nil {
 		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "token error"})
 		return
@@ -104,16 +105,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Name:     "refresh_token",
 		Value:    refresh,
 		HttpOnly: true,
-		Secure:   h.isProd,                    // dev = false, prod = true
-		SameSite: http.SameSiteLaxMode,        // กัน CSRF ได้พอสมควร
-		Path:     "/auth/refresh",             // ส่ง cookie แค่ตอนเรียก /auth/refresh
+		Secure:   h.isProd,             // dev = false, prod = true
+		SameSite: http.SameSiteLaxMode, // กัน CSRF ได้พอสมควร
+		Path:     "/",
 		MaxAge:   int(h.refreshTTL.Seconds()), // ใช้ค่าเดียวกับ refresh token TTL
 	})
 
 	resp := map[string]any{
-		"user":         u,
-		"access_token": access,
-		// ไม่ส่ง refresh_token ใน body แล้ว เพราะอยู่ใน cookie แล้ว
+		"user":           user.ToUserDTO(u),
+		"access_token":   access,
+		"access_expires": accessExp,
 	}
 
 	utils.WriteJSON(w, http.StatusOK, resp)
@@ -127,7 +128,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	access, newRefresh, err := h.tokenService.RefreshTokens(r.Context(), cookie.Value)
+	access, newRefresh, accessExp, err := h.tokenService.RefreshTokens(r.Context(), cookie.Value)
 	if err != nil {
 		switch err {
 		case ErrExpiredRefreshToken:
@@ -146,12 +147,13 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   h.isProd,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/auth/refresh",
+		Path:     "/",
 		MaxAge:   int(h.refreshTTL.Seconds()),
 	})
 
 	utils.WriteJSON(w, http.StatusOK, map[string]any{
-		"access_token": access,
+		"access_token":   access,
+		"access_expires": accessExp,
 	})
 }
 
@@ -161,7 +163,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Name:     "refresh_token",
 		Value:    "",
 		Path:     "/",
-		HttpOnly: true,
+		HttpOnly: h.isProd,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
