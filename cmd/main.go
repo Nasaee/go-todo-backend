@@ -31,12 +31,28 @@ func main() {
 	slog.SetDefault(logger)
 
 	// database connect
-	pool, err := pgxpool.New(ctx, cfg.db.dsn)
+	// database pool
+	poolCfg, err := pgxpool.ParseConfig(cfg.db.dsn)
 	if err != nil {
-		slog.Error("failed to connect to database", "error", err)
+		slog.Error("failed to parse db config", "error", err)
 		panic(err)
 	}
-	logger.Info("database pool connected 🎉")
+
+	poolCfg.MaxConns = int32(env.GetInt("DB_MAX_CONNS", 20))
+	poolCfg.MinConns = int32(env.GetInt("DB_MIN_CONNS", 2))
+	poolCfg.HealthCheckPeriod = time.Duration(env.GetInt("DB_HEALTH_CHECK_SEC", 30)) * time.Second
+	poolCfg.MaxConnLifetime = time.Duration(env.GetInt("DB_MAX_CONN_LIFETIME_MIN", 30)) * time.Minute
+	poolCfg.MaxConnIdleTime = time.Duration(env.GetInt("DB_MAX_CONN_IDLE_MIN", 10)) * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		slog.Error("failed to create db pool", "error", err)
+		panic(err)
+	}
+	logger.Info("database pool connected 🎉",
+		"max_conns", poolCfg.MaxConns,
+		"min_conns", poolCfg.MinConns,
+	)
 	defer pool.Close()
 
 	// redis
