@@ -9,7 +9,7 @@ import (
 	"github.com/Nasaee/go-todo-backend/internal/auth"
 	"github.com/Nasaee/go-todo-backend/internal/env"
 	"github.com/Nasaee/go-todo-backend/internal/user"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -31,13 +31,13 @@ func main() {
 	slog.SetDefault(logger)
 
 	// database connect
-	conn, err := pgx.Connect(ctx, cfg.db.dsn)
+	pool, err := pgxpool.New(ctx, cfg.db.dsn)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		panic(err)
 	}
-	logger.Info("database connection successful 🎉")
-	defer conn.Close(ctx)
+	logger.Info("database pool connected 🎉")
+	defer pool.Close()
 
 	// redis
 	rdb := redis.NewClient(&redis.Options{
@@ -46,7 +46,7 @@ func main() {
 	defer rdb.Close()
 
 	// services
-	userRepo := user.NewRepository(conn)
+	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo)
 
 	refreshTTL := 7 * 24 * time.Hour
@@ -63,7 +63,7 @@ func main() {
 
 	api := application{
 		config:       cfg,
-		db:           conn,
+		db:           pool,
 		userService:  userSvc,
 		tokenService: tokenSvc,
 		refreshTTL:   refreshTTL,

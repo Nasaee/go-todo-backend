@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type dbConfig struct {
@@ -30,7 +30,7 @@ type config struct {
 
 type application struct {
 	config       config
-	db           *pgx.Conn
+	db           *pgxpool.Pool
 	userService  user.UserService
 	tokenService auth.TokenService
 	refreshTTL   time.Duration

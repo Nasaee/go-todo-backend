@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserRepository interface {
@@ -12,10 +12,10 @@ type UserRepository interface {
 }
 
 type repo struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewRepository(db *pgx.Conn) UserRepository {
+func NewRepository(db *pgxpool.Pool) UserRepository {
 	return &repo{db: db}
 }
 
