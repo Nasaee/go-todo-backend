@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/Nasaee/go-todo-backend/pkg/utils"
 )
 
 // ---- context key สำหรับเก็บ userID ----
@@ -51,9 +53,22 @@ func AuthMiddleware(ts TokenService) func(http.Handler) http.Handler {
 			}
 
 			// 2) ตรวจ access token
-			claims, err := ts.ParseAccessToken(tokenStr)
+			claims, err := ts.ParseAccessToken(r.Context(), tokenStr)
 			if err != nil {
-				http.Error(w, "invalid or expired access token", http.StatusUnauthorized)
+				switch err {
+				case ErrExpiredAccessToken:
+					utils.WriteJSON(w, http.StatusUnauthorized, map[string]string{
+						"message": "access token expired",
+					})
+				case ErrInvalidAccessToken:
+					utils.WriteJSON(w, http.StatusUnauthorized, map[string]string{
+						"message": "invalid access token",
+					})
+				default:
+					utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{
+						"message": "access token error",
+					})
+				}
 				return
 			}
 

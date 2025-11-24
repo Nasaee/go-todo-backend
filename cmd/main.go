@@ -8,6 +8,7 @@ import (
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
 	"github.com/Nasaee/go-todo-backend/internal/env"
+	"github.com/Nasaee/go-todo-backend/internal/todogroup"
 	"github.com/Nasaee/go-todo-backend/internal/user"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -65,6 +66,9 @@ func main() {
 	userRepo := user.NewRepository(pool)
 	userSvc := user.NewService(userRepo)
 
+	todoGroupRepo := todogroup.NewRepository(pool)
+	todoGroupSvc := todogroup.NewService(todoGroupRepo)
+
 	refreshTTL := 7 * 24 * time.Hour
 	accessTTL := 15 * time.Minute
 
@@ -78,12 +82,13 @@ func main() {
 	)
 
 	api := application{
-		config:       cfg,
-		db:           pool,
-		userService:  userSvc,
-		tokenService: tokenSvc,
-		refreshTTL:   refreshTTL,
-		isProd:       isProd,
+		config:           cfg,
+		db:               pool,
+		userService:      userSvc,
+		tokenService:     tokenSvc,
+		todoGroupService: todoGroupSvc,
+		refreshTTL:       refreshTTL,
+		isProd:           isProd,
 	}
 
 	// ใช้ ctx + graceful shutdown

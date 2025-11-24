@@ -10,7 +10,6 @@ type TodoGroup struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// รับจาก body ตอน client สร้าง group
 type CreateTodoGroupInput struct {
 	Name string `json:"name"`
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
 	"github.com/Nasaee/go-todo-backend/internal/env"
+	"github.com/Nasaee/go-todo-backend/internal/todogroup"
 	"github.com/Nasaee/go-todo-backend/internal/user"
 	"github.com/Nasaee/go-todo-backend/pkg/utils"
 	"github.com/go-chi/chi/v5"
@@ -29,12 +30,13 @@ type config struct {
 }
 
 type application struct {
-	config       config
-	db           *pgxpool.Pool
-	userService  user.UserService
-	tokenService auth.TokenService
-	refreshTTL   time.Duration
-	isProd       bool
+	config           config
+	db               *pgxpool.Pool
+	userService      user.UserService
+	tokenService     auth.TokenService
+	todoGroupService todogroup.TodoGroupService
+	refreshTTL       time.Duration
+	isProd           bool
 }
 
 func (app *application) mount() http.Handler {
@@ -67,6 +69,7 @@ func (app *application) mount() http.Handler {
 	})
 
 	authHandler := auth.NewHandler(app.userService, app.tokenService, app.refreshTTL, app.isProd)
+	todoGroupHandler := todogroup.NewHandler(app.todoGroupService)
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/register", authHandler.Register)
@@ -95,7 +98,11 @@ func (app *application) mount() http.Handler {
 				})
 			})
 
-			// TODO: อนาคต /api/todos ก็มาอยู่ใน group นี้
+			// 🔥 todo_groups routes
+			r.Route("/todo-groups", func(r chi.Router) {
+				r.Post("/", todoGroupHandler.Create)
+				r.Get("/", todoGroupHandler.GetAll)
+			})
 		})
 	})
 

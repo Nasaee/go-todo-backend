@@ -18,11 +18,13 @@ type Claims struct {
 var (
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrExpiredRefreshToken = errors.New("expired refresh token")
+	ErrInvalidAccessToken  = errors.New("invalid access token")
+	ErrExpiredAccessToken  = errors.New("expired access token")
 )
 
 type TokenService interface {
 	GenerateTokens(ctx context.Context, userID int64) (accessToken, refreshToken string, accessExpiresAt int64, err error)
-	ParseAccessToken(tokenStr string) (*Claims, error)
+	ParseAccessToken(ctx context.Context, tokenStr string) (*Claims, error)
 	RefreshTokens(ctx context.Context, refreshToken string) (string, string, int64, error)
 }
 
@@ -111,7 +113,8 @@ func (s *tokenService) GenerateTokens(ctx context.Context, userID int64) (string
 	return accessToken, refreshToken, expiresAt, nil
 }
 
-func (s *tokenService) ParseAccessToken(tokenStr string) (*Claims, error) {
+func (s *tokenService) ParseAccessToken(ctx context.Context, tokenStr string) (*Claims, error) {
+	// ตอนนี้ยังไม่ได้ใช้ ctx ข้างใน แต่รับมาไว้ก่อน เผื่ออนาคตอยากเช็ค blacklist ใน Redis เพิ่ม
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
 		// กัน alg แปลก ๆ
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -120,12 +123,16 @@ func (s *tokenService) ParseAccessToken(tokenStr string) (*Claims, error) {
 		return s.secret, nil
 	})
 	if err != nil {
-		return nil, err
+		// map error จาก jwt → error ของเราเอง
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredAccessToken
+		}
+		return nil, ErrInvalidAccessToken
 	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
-		return nil, jwt.ErrTokenInvalidClaims
+		return nil, ErrInvalidAccessToken
 	}
 
 	return claims, nil
