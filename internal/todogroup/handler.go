@@ -2,6 +2,7 @@ package todogroup
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
@@ -26,6 +27,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var input CreateTodoGroupInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		fmt.Println(err)
 		utils.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"message": "invalid body",
 		})
@@ -34,6 +36,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	g, err := h.svc.Create(r.Context(), userID, input)
 	if err != nil {
+		fmt.Println(err)
 		if err == ErrEmptyName {
 			utils.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"message": "name is required",
@@ -59,6 +62,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 	groups, err := h.svc.GetAll(r.Context(), userID)
 	if err != nil {
+		fmt.Println(err)
 		utils.WriteJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "could not fetch todo groups",
 		})

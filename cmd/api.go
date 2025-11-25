@@ -98,7 +98,7 @@ func (app *application) mount() http.Handler {
 				})
 			})
 
-			// 🔥 todo_groups routes
+			// todo_groups routes
 			r.Route("/todo-groups", func(r chi.Router) {
 				r.Post("/", todoGroupHandler.Create)
 				r.Get("/", todoGroupHandler.GetAll)

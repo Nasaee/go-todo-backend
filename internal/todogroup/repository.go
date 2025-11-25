@@ -28,8 +28,8 @@ func (r *postgresRepo) Create(ctx context.Context, g *TodoGroup) error {
 	}
 
 	query := `
-		INSERT INTO todo_groups (name, user_id)
-		VALUES ($1, $2)
+		INSERT INTO todo_groups (name, user_id, color)
+		VALUES ($1, $2, $3)
 		RETURNING id, created_at, updated_at
 	`
 	/*
@@ -37,14 +37,14 @@ func (r *postgresRepo) Create(ctx context.Context, g *TodoGroup) error {
 		db.QueryRow()
 		pool.QueryRow()
 	*/
-	row := r.db.QueryRow(ctx, query, g.Name, g.UserID)
+	row := r.db.QueryRow(ctx, query, g.Name, g.UserID, g.Color)
 
 	return row.Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt)
 }
 
 func (r *postgresRepo) GetAllByUser(ctx context.Context, userID int64) ([]TodoGroup, error) {
 	query := `
-		SELECT *
+		SELECT id, name, color, user_id, created_at, updated_at
 		FROM todo_groups
 		WHERE user_id = $1
 		ORDER BY name
@@ -63,12 +63,14 @@ func (r *postgresRepo) GetAllByUser(ctx context.Context, userID int64) ([]TodoGr
 		if err := rows.Scan(
 			&g.ID,
 			&g.Name,
+			&g.Color,
 			&g.UserID,
 			&g.CreatedAt,
 			&g.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
+
 		groups = append(groups, g)
 	}
 

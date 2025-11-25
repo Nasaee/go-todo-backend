@@ -27,6 +27,7 @@ func (s *service) Create(ctx context.Context, userID int64, input CreateTodoGrou
 	g := &TodoGroup{
 		Name:   name,
 		UserID: userID,
+		Color:  input.Color,
 	}
 
 	if err := s.repo.Create(ctx, g); err != nil {

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -124,6 +125,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil || cookie.Value == "" {
+		fmt.Println(err)
 		utils.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing refresh token"})
 		return
 	}
