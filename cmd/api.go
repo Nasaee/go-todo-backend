@@ -1,3 +1,4 @@
+// api.go
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
 	"github.com/Nasaee/go-todo-backend/internal/env"
+	"github.com/Nasaee/go-todo-backend/internal/todo"
 	"github.com/Nasaee/go-todo-backend/internal/todogroup"
 	"github.com/Nasaee/go-todo-backend/internal/user"
 	"github.com/Nasaee/go-todo-backend/pkg/utils"
@@ -35,6 +37,7 @@ type application struct {
 	userService      user.UserService
 	tokenService     auth.TokenService
 	todoGroupService todogroup.TodoGroupService
+	todoService      todo.Service
 	refreshTTL       time.Duration
 	isProd           bool
 }
@@ -71,6 +74,8 @@ func (app *application) mount() http.Handler {
 	authHandler := auth.NewHandler(app.userService, app.tokenService, app.refreshTTL, app.isProd)
 	todoGroupHandler := todogroup.NewHandler(app.todoGroupService)
 
+	todoHandler := todo.NewHandler(app.todoService)
+
 	r.Route("/auth", func(r chi.Router) {
 		r.Post("/register", authHandler.Register)
 		r.Post("/login", authHandler.Login)
@@ -102,6 +107,17 @@ func (app *application) mount() http.Handler {
 			r.Route("/todo-groups", func(r chi.Router) {
 				r.Post("/", todoGroupHandler.Create)
 				r.Get("/", todoGroupHandler.GetAll)
+			})
+
+			r.Route("/todos", func(r chi.Router) {
+				r.Get("/", todoHandler.ListTodos)             // GET /api/todos
+				r.Post("/", todoHandler.CreateTodo)           // POST /api/todos
+				r.Get("/today", todoHandler.ListTodayTodos)   // GET /api/todos/today
+				r.Get("/tomorrow", todoHandler.ListTomorrow)  // GET /api/todos/tomorrow
+				r.Get("/this-week", todoHandler.ListThisWeek) // GET /api/todos/this-week
+				r.Get("/{id}", todoHandler.GetTodoByID)       // GET /api/todos/{id}
+				r.Put("/{id}", todoHandler.UpdateTodo)        // PUT /api/todos/{id}
+				r.Delete("/{id}", todoHandler.DeleteTodo)     // DELETE /api/todos/{id}
 			})
 		})
 	})

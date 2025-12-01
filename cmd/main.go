@@ -8,6 +8,7 @@ import (
 
 	"github.com/Nasaee/go-todo-backend/internal/auth"
 	"github.com/Nasaee/go-todo-backend/internal/env"
+	"github.com/Nasaee/go-todo-backend/internal/todo"
 	"github.com/Nasaee/go-todo-backend/internal/todogroup"
 	"github.com/Nasaee/go-todo-backend/internal/user"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,6 +70,9 @@ func main() {
 	todoGroupRepo := todogroup.NewRepository(pool)
 	todoGroupSvc := todogroup.NewService(todoGroupRepo)
 
+	todoRepo := todo.NewRepository(pool)
+	todoSvc := todo.NewService(todoRepo)
+
 	refreshTTL := 7 * 24 * time.Hour
 	accessTTL := 15 * time.Minute
 
@@ -87,6 +91,7 @@ func main() {
 		userService:      userSvc,
 		tokenService:     tokenSvc,
 		todoGroupService: todoGroupSvc,
+		todoService:      todoSvc,
 		refreshTTL:       refreshTTL,
 		isProd:           isProd,
 	}

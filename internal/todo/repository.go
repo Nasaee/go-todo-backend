@@ -22,6 +22,36 @@ func checkRowsAffectedOne(cmdTag pgconn.CommandTag) error {
 	return nil
 }
 
+func scanTodos(rows pgx.Rows) ([]Todo, error) {
+	defer rows.Close()
+
+	var todos []Todo
+	for rows.Next() {
+		var t Todo
+		if err := rows.Scan(
+			&t.ID,
+			&t.Title,
+			&t.Description,
+			&t.DateStart,
+			&t.DateEnd,
+			&t.IsSuccess,
+			&t.UserID,
+			&t.TodoGroupID,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		todos = append(todos, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return todos, nil
+}
+
 // ================== Interface ==================
 type TodoRepository interface {
 	Create(ctx context.Context, t *Todo) error
@@ -29,6 +59,9 @@ type TodoRepository interface {
 	ListByUser(ctx context.Context, userID int64) ([]Todo, error)
 	Update(ctx context.Context, t *Todo) error
 	Delete(ctx context.Context, id, userID int64) error
+	ListToday(ctx context.Context, userID int64) ([]Todo, error)
+	ListTomorrow(ctx context.Context, userID int64) ([]Todo, error)
+	ListThisWeek(ctx context.Context, userID int64) ([]Todo, error)
 }
 
 type PostgresRepo struct {
@@ -210,4 +243,88 @@ func (r *PostgresRepo) Delete(ctx context.Context, id, userID int64) error {
 	}
 
 	return checkRowsAffectedOne(cmdTag)
+}
+
+func (r *PostgresRepo) ListToday(ctx context.Context, userID int64) ([]Todo, error) {
+	query := `
+		SELECT
+			id,
+			title,
+			description,
+			date_start,
+			date_end,
+			is_success,
+			user_id,
+			todo_group_id,
+			created_at,
+			updated_at
+		FROM todos
+		WHERE user_id = $1
+		  AND date_start = CURRENT_DATE
+		ORDER BY title, id
+	`
+
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return scanTodos(rows)
+}
+
+func (r *PostgresRepo) ListTomorrow(ctx context.Context, userID int64) ([]Todo, error) {
+	query := `
+		SELECT
+			id,
+			title,
+			description,
+			date_start,
+			date_end,
+			is_success,
+			user_id,
+			todo_group_id,
+			created_at,
+			updated_at
+		FROM todos
+		WHERE user_id = $1
+		  AND date_start = CURRENT_DATE + INTERVAL '1 day'
+		ORDER BY title, id
+	`
+
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return scanTodos(rows)
+}
+
+func (r *PostgresRepo) ListThisWeek(ctx context.Context, userID int64) ([]Todo, error) {
+	/*
+		AND date_start >= date_trunc('week', CURRENT_DATE)::date -> result is monday of this week
+		AND date_start < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date -> 7 days from Monday–Sunday
+	*/
+	query := `
+		SELECT
+			id,
+			title,
+			description,
+			date_start,
+			date_end,
+			is_success,
+			user_id,
+			todo_group_id,
+			created_at,
+			updated_at
+		FROM todos
+		WHERE user_id = $1
+		  AND date_start >= date_trunc('week', CURRENT_DATE)::date
+		  AND date_start < (date_trunc('week', CURRENT_DATE) + INTERVAL '1 week')::date
+		ORDER BY date_start, title
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	return scanTodos(rows)
 }
